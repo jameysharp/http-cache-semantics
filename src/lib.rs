@@ -1,13 +1,30 @@
 #[macro_use(lazy_static)]
 extern crate lazy_static;
+extern crate serde_json;
+extern crate chrono;
 
 #[allow(dead_code)]
 mod http_cache_semantics {
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
+    use std::string::String;
+    use serde_json::{json, Value};
+    use chrono::prelude::*;
 
     lazy_static! {
         static ref STATUS_CODE_CACHEABLE_BY_DEFAULT: HashSet<i32> = {
             let mut set = HashSet::new();
+            set.insert(200);
+            set.insert(203);
+            set.insert(204);
+            set.insert(206);
+            set.insert(300);
+            set.insert(301);
+            set.insert(404);
+            set.insert(405);
+            set.insert(410);
+            set.insert(414);
+            set.insert(501);
+
             return set;
         };
     }
@@ -15,6 +32,21 @@ mod http_cache_semantics {
     lazy_static! {
         static ref UNDERSTOOD_STATUSES: HashSet<i32> = {
             let mut set = HashSet::new();
+            set.insert(200);
+            set.insert(203);
+            set.insert(204);
+            set.insert(300);
+            set.insert(301);
+            set.insert(302);
+            set.insert(303);
+            set.insert(307);
+            set.insert(308);
+            set.insert(404);
+            set.insert(405);
+            set.insert(410);
+            set.insert(414);
+            set.insert(501);
+
             return set;
         };
     }
@@ -22,13 +54,28 @@ mod http_cache_semantics {
     lazy_static! {
         static ref HOP_BY_HOP_HEADERS: HashSet<&'static str> = {
             let mut set = HashSet::new();
+            set.insert("date");
+            set.insert("connection");
+            set.insert("keep-alive");
+            set.insert("proxy-authentication");
+            set.insert("proxy-authorization");
+            set.insert("te");
+            set.insert("trailer");
+            set.insert("transfer-encoding");
+            set.insert("upgrade");
+
             return set;
         };
     }
 
     lazy_static! {
         static ref EXCLUDED_FROM_REVALIDATION_UPDATE: HashSet<&'static str> = {
-            let mut set = HashSet::new();                    
+            let mut set = HashSet::new(); 
+            set.insert("content-length");
+            set.insert("content-encoding");
+            set.insert("transfer-encoding");
+            set.insert("content-range");
+
             return set;
         };
     }
@@ -41,89 +88,138 @@ mod http_cache_semantics {
         unimplemented!();
     }
 
-    struct CachePolicy;
+    #[derive(Debug)]
+    pub struct CachePolicy {
+        request: Value,
+        response: Value,
+
+        // optionals
+        shared: Option<bool>,
+        ignore_cargo_cult: Option<bool>,
+        trust_server_date: Option<bool>,
+        cache_heuristic: Option<bool>,
+        immutable_min_time_to_live: Option<i32>,
+
+        // tbd
+        // response_time: String,
+        // status: i32,
+        // response_cache_control: String,
+        // method: String,
+        // url: String,
+        // host: String,
+        // no_authorization: bool,
+        // request_cache_control: String,
+    }
+
     impl CachePolicy {
+        pub fn new(request: Value, response: Value) -> Self {
+            CachePolicy {
+                request: request,
+                response: response,
+                shared: None,
+                cache_heuristic: None,
+                immutable_min_time_to_live: None,
+                ignore_cargo_cult: None,
+                trust_server_date: None,
+            }
+        }
+
+        pub fn with_shared(mut self, value: bool) -> CachePolicy {
+            self.shared = Some(value);
+            self
+        }
+
+        pub fn with_ignored_cargo_cult(mut self, value: bool) -> CachePolicy {
+            self.ignore_cargo_cult = Some(value);
+            self
+        }
+
+        pub fn with_trust_server_date(mut self, value: bool) -> CachePolicy {
+            self.trust_server_date = Some(value);
+            self
+        }
+
         pub fn now() -> String {
+            return Utc::now().to_string();
+        }
+
+        pub fn is_storable(&self) -> bool {
             unimplemented!();
         }
 
-        pub fn storable() {
+        fn has_explicit_expiration(&self) {
             unimplemented!();
         }
 
-        fn has_explicit_expiration() {
+        fn assert_request_has_headers(&self, request: String) {
             unimplemented!();
         }
 
-        fn assert_request_has_headers() {
+        pub fn satisfies_without_revalidation(&self, request: Value) -> bool {
             unimplemented!();
         }
 
-        pub fn satisfies_without_revalidation() {
+        fn request_matches(&self, request: String, allow_head_method: bool) {
             unimplemented!();
         }
 
-        fn request_matches() {
+        fn allows_storing_authenticated(&self) {
             unimplemented!();
         }
 
-        fn allows_storing_authenticated() {
+        fn vary_matches(&self, request: String) -> bool {
             unimplemented!();
         }
 
-        fn vary_matches() {
+        fn copy_without_hop_by_hop_headers(&self, in_headers: HashMap<String, String>) -> HashMap<String, String> {
             unimplemented!();
         }
 
-        fn copy_without_hop_by_hop_headers() {
+        pub fn response_headers(&self) -> Value {
             unimplemented!();
         }
 
-        pub fn response_headers() {
+        pub fn date(&self) {
             unimplemented!();
         }
 
-        pub fn date() {
+        fn server_date(&self) {
             unimplemented!();
         }
 
-        fn server_date() {
+        pub fn age(&self) -> i32 {
             unimplemented!();
         }
 
-        pub fn age() {
-            unimplemented!();
-        }
-
-        fn age_value() {
+        fn age_value(&self) {
             unimplemented!();
         }
         
-        pub fn max_age() {
+        pub fn max_age(&self) -> i32 {
             unimplemented!();
         }
 
-        pub fn time_to_live() {
+        pub fn time_to_live(&self) -> i32 {
             unimplemented!();
         }
 
-        pub fn stale() {
+        pub fn is_stale(&self) -> bool {
             unimplemented!();
         }
 
-        pub fn from_object() {
+        pub fn from_object(object: HashMap<String, String>) -> CachePolicy {
             unimplemented!();
         }
 
-        pub fn to_object() {
+        pub fn to_object(&self) -> HashMap<String, String> {
             unimplemented!();
         }
 
-        pub fn revalidation_headers() {
+        pub fn revalidation_headers(&self, incoming_request: String) -> HashMap<String, String> {
             unimplemented!();
         }
 
-        pub fn revalidated_policy() {
+        pub fn revalidated_policy(&self, request: String, response: HashMap<String, String>) -> HashMap<String, String> {
             unimplemented!();
         }
     }
@@ -131,108 +227,421 @@ mod http_cache_semantics {
 
 #[cfg(test)]
 mod tests {
+    extern crate serde_json;
+    use crate::http_cache_semantics::CachePolicy;
+    use serde_json::json;
+    use chrono::prelude::*;
+    use std::string::String;
+    use std::collections::HashMap;
+    use std::collections::HashSet;
     use super::*;
     
-    fn assert_cached() {
-        assert!(false);
+    fn assert_cached(should_put: bool, response_code: i32) {
+        let expected_response_code = response_code;
+
+        let mut response = json!({
+            "headers": {
+                "last-modified": format_date(-105, 1),
+                "expires": format_date(1, 3600),
+                "www.authenticate": "challenge"
+            },
+            "status": response_code,
+            "body": "ABCDE",
+        });
+
+        if 407 == response {
+            response["headers"]["proxy-authenticate"] = json!("Basic realm=\"protected area\"");
+        } else if 401 == response_code {
+            response["headers"]["www-authenticate"] = json!("Basic realm=\"protected area\"");
+        } else if 204 == response_code || 205 == response_code {
+            response = json!({"body": ""});
+        }
+
+        let mut request = json!({
+            "url": "/",
+            "headers": {}
+        });
+
+        let policy = CachePolicy::new(
+            request,
+            response
+        ).with_shared(false);
+
+        assert_eq!(should_put, policy.is_storable());
     }
     
     #[test]
     fn test_ok_http_response_caching_by_response_code() {
-        assert!(false);
+        assert_cached(false, 100);
+        assert_cached(false, 101);
+        assert_cached(false, 102);
+        assert_cached(true, 200);
+        assert_cached(false, 201);
+        assert_cached(false, 202);
+        assert_cached(true, 203);
+        assert_cached(true, 204);
+        assert_cached(false, 205);
+        // 206: electing to not cache partial responses
+        assert_cached(false, 206); 
+        assert_cached(false, 207);
+        assert_cached(true, 300);
+        assert_cached(true, 301);
+        assert_cached(true, 302);
+        assert_cached(false, 303);
+        assert_cached(false, 304);
+        assert_cached(false, 305);
+        assert_cached(false, 306);
+        assert_cached(true, 307);
+        assert_cached(true, 308);
+        assert_cached(false, 400);
+        assert_cached(false, 401);
+        assert_cached(false, 402);
+        assert_cached(false, 403);
+        assert_cached(true, 404);
+        assert_cached(true, 405);
+        assert_cached(false, 406);
+        assert_cached(false, 408);
+        assert_cached(false, 409);
+        // 410: the HTTP spec permits caching 410s, but the RI doesn't
+        assert_cached(true, 410); 
+        assert_cached(false, 411);
+        assert_cached(false, 412);
+        assert_cached(false, 413);
+        assert_cached(true, 414);
+        assert_cached(false, 415);
+        assert_cached(false, 416);
+        assert_cached(false, 417);
+        assert_cached(false, 418);
+        assert_cached(false, 429);
+        assert_cached(false, 500);
+        assert_cached(true, 501);
+        assert_cached(false, 502);
+        assert_cached(false, 503);
+        assert_cached(false, 504);
+        assert_cached(false, 505);
+        assert_cached(false, 506);
     }
     
     #[test]
     fn test_default_expiration_date_fully_cached_for_less_than_24_hours() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({"headers": {}}),
+            json!({
+                "headers": {
+                    "last-modified": format_date(-105, 1),
+                    "date": format_date(-5, 1),
+                },
+                "body": "A"
+            })
+        ).with_shared(false);   
+
+        assert!(policy.time_to_live() > 4000);
     }
     
     #[test]
     fn test_default_expiration_date_fully_cached_for_more_than_24_hours() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({"headers": {}}),
+            json!({
+                "headers": {
+                    "last-modified": format_date(-105, 3600 * 24),
+                    "date": format_date(-5, 3600 * 24),
+                },
+                "body": "A"
+            })
+        ).with_shared(false);
+
+        assert!(policy.max_age() >= 10 * 3600 * 24);
+        assert!(policy.time_to_live() + 1000 >= 5 * 3600 * 24);
     }
     
     #[test]
     fn test_max_age_in_the_past_with_date_header_but_no_last_modified_header() {
-        assert!(false);
+        // Chrome interprets max-age relative to the local clock. Both our cache
+        // and Firefox both use the earlier of the local and server's clock.
+        let policy = CachePolicy::new(
+            json!({"headers": {}}),
+            json!({
+                "headers": {
+                    "date": format_date(-120, 1),
+                    "cache-control": "max-age=60",
+                }
+            })
+        ).with_shared(false);
+
+        assert!(policy.is_stale());
     }
     
     #[test]
     fn test_max_age_preferred_over_lower_shared_max_age() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({"headers": {}}),
+            json!({
+                "headers": {
+                    "date": format_date(-2, 60),
+                    "cache-control": "s-maxage=60, max-age=180",
+                }
+            })
+        ).with_shared(false);
+
+        assert_eq!(policy.max_age(), 180);
     }
     
     #[test]
     fn test_max_age_preferred_over_higher_max_age() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({"headers": {}}),
+            json!({
+                "headers": {
+                    "date": format_date(-3, 60),
+                    "cache-control": "s-maxage=60, max-age=180",
+                }
+            })
+        ).with_shared(false);
+
+        assert!(policy.is_stale());
     }
     
-    fn request_method_not_cached() {
-        assert!(false);
+    fn request_method_not_cached(method: String) {
+        // 1. seed the cache (potentially)
+        // 2. expect a cache hit or miss
+        let policy = CachePolicy::new(
+            json!({
+                "method": method, 
+                "headers": {}
+            }),
+            json!({
+                "headers": {
+                    "expires": format_date(1, 3600),
+                }
+            })
+        ).with_shared(false);
+
+        assert!(policy.is_stale());
     }
     
     #[test]
     fn test_request_method_options_is_not_cached() {
-        assert!(false);
+        request_method_not_cached("OPTIONS".to_string());
     }
     
     #[test]
     fn test_request_method_put_is_not_cached() {
-        assert!(false);
+        request_method_not_cached("PUT".to_string());
     }
     
     #[test]
     fn test_request_method_delete_is_not_cached() {
-        assert!(false);
+        request_method_not_cached("DELETE".to_string());
     }
     
     #[test]
     fn test_request_method_trace_is_not_cached() {
-        assert!(false);
+        request_method_not_cached("TRACE".to_string());
     }
     
     #[test]
     fn test_etag_and_expiration_date_in_the_future() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({"headers": {}}),
+            json!({
+                "headers": {
+                    "etag": "v1",
+                    "last-modified": format_date(-2, 3600),
+                    "expires": format_date(1, 3600),
+                }
+            })
+        ).with_shared(false);
+
+        assert!(policy.time_to_live() > 0);
     }
     
     #[test]
     fn test_client_side_no_store() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "headers": {
+                    "cache-control": "no-store",
+                }
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "max-age=60",
+                }
+            })
+        ).with_shared(false);
+
+        assert_eq!(policy.is_storable(), false);
     }
     
     #[test]
     fn test_request_max_age() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({"headers": {}}),
+            json!({
+                "headers": {
+                    "last-modified": format_date(-2, 3600),
+                    "date": format_date(-1, 60),
+                    "expires": format_date(1, 3600),
+                }
+            })
+        ).with_shared(false);
+
+        assert_eq!(policy.is_stale(), false);
+        assert!(policy.age() >= 60);
+
+        assert_eq!(
+            policy.satisfies_without_revalidation(json!({
+                "headers": {
+                    "cache-control": "max-age=90",
+                },
+            })), true
+        );
+
+        assert_eq!(
+            policy.satisfies_without_revalidation(json!({
+                "headers": {
+                    "cache-control": "max-age=30",
+                },
+            })), false
+        );
     }
     
     #[test]
     fn test_request_min_fresh() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({"headers": {}}),
+            json!({
+                "headers": {
+                    "cache-control": "max-age=60",
+                }
+            })
+        ).with_shared(false);
+
+        assert_eq!(policy.is_stale(), false);
+
+        assert_eq!(
+            policy.satisfies_without_revalidation(json!({
+                "headers": {
+                    "cache-control": "min-fresh=10",
+                },
+            })), true
+        );
+
+        assert_eq!(
+            policy.satisfies_without_revalidation(json!({
+                "headers": {
+                    "cache-control": "min-fresh=120",
+                },
+            })), false
+        );
     }
     
     #[test]
     fn test_request_max_stale() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({"headers": {}}),
+            json!({
+                "headers": {
+                    "cache-control": "max-age=120",
+                    "date": format_date(-4, 60),
+                }
+            })
+        ).with_shared(false);
+
+        assert!(policy.is_stale());
+
+        assert_eq!(
+            policy.satisfies_without_revalidation(json!({
+                "headers": {
+                    "cache-control": "max-stale=180",
+                },
+            })), true
+        );
+    
+        assert_eq!(
+            policy.satisfies_without_revalidation(json!({
+                "headers": {
+                    "cache-control": "max-stale",
+                },
+            })), true
+        );
+
+        assert_eq!(
+            policy.satisfies_without_revalidation(json!({
+                "headers": {
+                    "cache-control": "max-stale=10",
+                },
+            })), false
+        );
     }
     
     #[test]
     fn test_request_max_stale_not_honored_with_must_revalidate() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({"headers": {}}),
+            json!({
+                "headers": {
+                    "cache-control": "max-age=120, must-revalidate",
+                    "date": format_date(-4, 60),
+                }
+            })
+        ).with_shared(false);
+
+        assert!(policy.is_stale());
+
+        assert_eq!(
+            policy.satisfies_without_revalidation(json!({
+                "headers": {
+                    "cache-control": "max-stale=180",
+                },
+            })), false
+        );
+
+        assert_eq!(
+            policy.satisfies_without_revalidation(json!({
+                "headers": {
+                    "cache-control": "max-stale",
+                },
+            })), false
+        );
     }
     
     #[test]
     fn test_get_headers_deletes_cached_100_level_warnings() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({"headers": {}}),
+            json!({
+                "headers": {
+                    "warning": "199 test danger, 200 ok ok",
+                }
+            })
+        );
+
+        assert_eq!("200 ok ok", policy.response_headers()["warning"]);
     }
     
     #[test]
     fn test_do_not_cache_partial_response() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({"headers": {}}),
+            json!({
+                "status": 206,
+                "headers": {
+                    "content-range": "bytes 100-100/200",
+                    "cache-control": "max-age=60",
+                }
+            })
+        );
+
+        assert_eq!(policy.is_storable(), false);
     }
     
-    fn format_date() {
-        assert!(false);
+    fn format_date(delta: i64, unit: i64) -> String {
+        let now: DateTime<Utc> = Utc::now();
+        let result = now.timestamp_nanos() + delta * unit * 1000;
+
+        return result.to_string();
     }
     
     #[test]
