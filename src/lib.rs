@@ -646,37 +646,143 @@ mod tests {
     
     #[test]
     fn test_no_store_kills_cache() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {
+                    "cache-control": "no-store",
+                }
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "public, max-age=222",
+                }
+            })
+        );
+
+        assert_eq!(policy.is_stale(), true);
+        assert_eq!(policy.is_storable(), false);
     }
     
     #[test]
     fn test_post_not_cacheable_by_default() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "POST",
+                "headers": {},
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "public",
+                }
+            })
+        );
+
+        assert_eq!(policy.is_stale(), true);
+        assert_eq!(policy.is_storable(), false);
     }
     
     #[test]
     fn test_post_cacheable_explicitly() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "POST",
+                "headers": {},
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "public, max-age=222",
+                }
+            })
+        );
+
+        assert_eq!(policy.is_stale(), false);
+        assert_eq!(policy.is_storable(), true);
     }
     
     #[test]
     fn test_public_cacheable_auth_is_ok() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {
+                    "authorization": "test",
+                }
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "public, max-age=222",
+                }
+            })
+        );
+
+        assert_eq!(policy.is_stale(), false);
+        assert_eq!(policy.is_storable(), true);
     }
     
     #[test]
     fn test_proxy_cacheable_auth_is_ok() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {
+                    "authorization": "test",
+                }
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "max-age=0,s-maxage=12",
+                }
+            })
+        );
+
+        assert_eq!(policy.is_stale(), false);
+        assert_eq!(policy.is_storable(), true);
+
+        let policy_two = CachePolicy::from_object(HashMap::new());
+        // TODO: assert(cache2 instanceof CachePolicy);
+
+        assert_eq!(!policy_two.is_stale(), true);
+        assert_eq!(policy_two.is_storable(), true);
     }
     
     #[test]
     fn test_private_auth_is_ok() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {
+                    "authorization": "test",
+                }
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "max-age=111",
+                }
+            })
+        ).with_shared(false);
+
+        assert_eq!(policy.is_stale(), false);
+        assert_eq!(policy.is_storable(), true);
     }
     
     #[test]
     fn test_revalidate_auth_is_ok() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {
+                    "authorization": "test",
+                }
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "max-age=88,must-revalidate",
+                }
+            })
+        );
+
+        assert_eq!(policy.is_storable(), true);
     }
     
     #[test]
