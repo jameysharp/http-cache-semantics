@@ -139,6 +139,11 @@ mod http_cache_semantics {
             self
         }
 
+        pub fn with_immutable_min_time_to_live(mut self, value: i32) -> CachePolicy {
+            self.immutable_min_time_to_live = Some(value);
+            self
+        }
+
         pub fn now() -> String {
             return Utc::now().to_string();
         }
@@ -787,192 +792,752 @@ mod tests {
     
     #[test]
     fn test_auth_prevents_caching_by_default() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {
+                    "authorization": "test",
+                }
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "max-age=111",
+                }
+            })
+        );
+
+        assert_eq!(policy.is_stale(), true);
+        assert_eq!(policy.is_storable(), false);
     }
     
     #[test]
     fn test_simple_miss() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({})
+        );
+
+        assert_eq!(policy.is_stale(), true);
     }
     
     #[test]
     fn test_simple_hit() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "cache-control": "public, max-age=999999"
+            })
+        );
+        
+        assert_eq!(policy.is_stale(), false);
+        assert_eq!(policy.max_age(), 999999);
     }
     
     #[test]
     fn test_weird_syntax() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "cache-control": ",,,,max-age =  456      ,"
+            })
+        );
+
+        assert_eq!(policy.is_stale(), false);
+        assert_eq!(policy.max_age(), 456);
+
+        let policy_two = CachePolicy::from_object(HashMap::new());
+        // TODO: assert(cache2 instanceof CachePolicy);
+
+        assert_eq!(policy_two.is_stale(), false);
+        assert_eq!(policy_two.max_age(), 456);
     }
     
     #[test]
     fn test_quoted_syntax() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "cache-control": "  max-age = \"678\"      "
+            })
+        );
+
+        assert_eq!(policy.is_stale(), false);
+        assert_eq!(policy.max_age(), 678);
     }
     
     #[test]
     fn test_iis() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "cache-control": "private, public, max-age=259200"
+            })
+        ).with_shared(false);
+
+        assert_eq!(policy.is_stale(), false);
+        assert_eq!(policy.max_age(), 259200);
     }
     
     #[test]
     fn test_pre_check_tolerated() {
-        assert!(false);
+        let cache_control = json!("pre-check=0, post-check=0, no-store, no-cache, max-age=100");
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "cache-control": cache_control
+            })
+        );
+
+        assert_eq!(policy.is_stale(), true);
+        assert_eq!(policy.is_storable(), false);
+        assert_eq!(policy.max_age(), 0);
+        assert_eq!(policy.response_headers()["cache-control"], cache_control);
     }
     
     #[test]
     fn test_pre_check_poison() {
-        assert!(false);
+        let original_cache_control = json!("pre-check=0, post-check=0, no-cache, no-store, max-age=100, custom, foo=bar");
+        let response = json!({
+            "headers": {
+                "cache-control": original_cache_control,
+                "pragma": "no-cache"
+            }
+        });
+
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            response
+        ); 
+
+        assert_eq!(policy.is_stale(), false);
+        assert_eq!(policy.is_storable(), true);
+        assert_eq!(policy.max_age(), 100);
+
+        // TODO: None of this works. Not really sure what it is doing.
+        // Link to function in JS: https://github.com/kornelski/http-cache-semantics/blob/master/test/responsetest.js#L66
     }
     
     #[test]
     fn test_pre_check_poison_undefined_header() {
-        assert!(false);
+        let original_cache_control = json!("pre-check=0, post-check=0, no-cache, no-store");
+        let response = json!({
+            "headers": {
+                "cache-control": original_cache_control,
+                "expires": "yesterday!"
+            }
+        });
+
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            response
+        ).with_ignored_cargo_cult(true);
+
+        assert_eq!(policy.is_stale(), true);
+        assert_eq!(policy.is_storable(), true);
+        assert_eq!(policy.max_age(), 0);
+
+        // TODO: Need to come back to figure this out.
+        // Again "cannot apply unary operator !"
+
+        // let cache_control = policy.response_headers()["cache-control"];
+        // assert!(!cache_control);
+        // assert!(response["headers"]["expires"]);
+        // assert!(!policy.response_headers()["expires"]);
     }
     
     #[test]
     fn test_cache_with_expires() {
-        assert!(false);
+        let local_time = Local::now();
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": {
+                    "date": "TODO: How does time work??", // new Date(now).toGMTString()
+                    "expires": "TODO: How does time work??" // new Date(now + 2000).toGMTString()
+                }
+            })
+        );
+
+        assert_eq!(policy.is_stale(), false);
+        assert_eq!(policy.max_age(), 2);
     }
     
     #[test]
     fn test_cache_with_expires_always_relative_to_date() {
-        assert!(false);
+        let local_time = Local::now();
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": {
+                    "date": "TODO: How does time work??", // new Date(now - 3000).toGMTString()
+                    "expires": "TODO: How does time work??" // new Date(now).toGMTString()
+                }
+            })
+        );
+
+        assert_eq!(policy.max_age(), 3);
     }
     
     #[test]
     fn test_cache_expires_no_date() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "public",
+                    "expires": "TODO: How does time work??" // new Date(Date.now() + 3600 * 1000).toGMTString()
+                }
+            })
+        );
+
+        assert_eq!(policy.is_stale(), false);
+        assert!(policy.max_age() > 3595);
+        assert!(policy.max_age() < 3605);
     }
     
     #[test]
     fn test_ages() {
+        // TODO: Need to figure out how "subclassing" works in Rust
+        // Link to function in JS: https://github.com/kornelski/http-cache-semantics/blob/master/test/responsetest.js#L158
         assert!(false);
     }
     
     #[test]
     fn test_age_can_make_stale() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "max-age=100",
+                    "age": "101"
+                }
+            })
+        );
+
+        assert_eq!(policy.is_stale(), true);
+        assert_eq!(policy.is_storable(), true);
     }
     
     #[test]
     fn test_age_not_always_stale() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "max-age=20",
+                    "age": "15"
+                }
+            })
+        );
+
+        assert_eq!(policy.is_stale(), false);
+        assert_eq!(policy.is_storable(), true);
     }
     
     #[test]
     fn test_bogus_age_ignored() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "max-age=20",
+                    "age": "golden"
+                }
+            })
+        );
+
+        assert_eq!(policy.is_stale(), false);
+        assert_eq!(policy.is_storable(), true);
     }
     
     #[test]
     fn test_cache_old_files() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": {
+                    "date": "TODO: How does time work??", // new Date().toGMTString()
+                    "last-modified": "Mon, 07 Mar 2016 11:52:56 GMT"
+                }
+            })
+        );
+
+        assert_eq!(policy.is_stale(), false);
+        assert!(policy.max_age() > 100);
     }
     
     #[test]
     fn test_immutable_simple_hit() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "immutable, max-age=999999",
+                }
+            })
+        );
+
+        assert_eq!(policy.is_stale(), false);
+        assert_eq!(policy.max_age(), 999999);
     }
     
     #[test]
     fn test_immutable_can_expire() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "immutable, max-age=0",
+                }
+            })
+        );
+
+        assert_eq!(policy.is_stale(), true);
+        assert_eq!(policy.max_age(), 0);
     }
     
     #[test]
     fn test_cache_immutable_files() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": {
+                    "date": "TODO: How does time work??", // new Date().toGMTString()
+                    "cache-control": "immutable",
+                    "last-modified": "TODO: How does time work??", // new Date().toGMTString()
+                }
+            })
+        );
+
+        assert_eq!(policy.is_stale(), false);
+        assert!(policy.max_age() > 100);
     }
     
     #[test]
     fn test_immutable_can_be_off() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": {
+                    "date": "TODO: How does time work??", // new Date().toGMTString()
+                    "cache-control": "immutable",
+                    "last-modified": "TODO: How does time work??", // new Date().toGMTString()
+                }
+            })
+        ).with_immutable_min_time_to_live(0);
+
+        assert_eq!(policy.is_stale(), true);
+        assert_eq!(policy.max_age(), 0);
     }
     
     #[test]
     fn test_pragma_no_cache() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": {
+                    "pragma": "no-cache",
+                    "last-modified": "Mon, 07 Mar 2016 11:52:56 GMT", 
+                }
+            })
+        );
+
+        assert_eq!(policy.is_stale(), true);
     }
     
     #[test]
     fn test_blank_cache_control_and_pragma_no_cache() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "",
+                    "pragma": "no-cache",
+                    "last-modified": "TODO: How does time work??", // new Date().toGMTString() 
+                }
+            })
+        );
+
+        assert_eq!(policy.is_stale(), false);
     }
     
     #[test]
     fn test_no_store() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "no-store, public, max-age=1",
+                }
+            })
+        );
+
+        assert_eq!(policy.is_stale(), true);
+        assert_eq!(policy.max_age(), 0);
     }
     
     #[test]
     fn test_observe_private_cache() {
-        assert!(false);
+        let private_header = json!({
+            "cache-control": "private, max-age=1234",
+        });
+
+        let proxy_policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": private_header
+            })
+        );
+
+        assert_eq!(proxy_policy.is_stale(), true);
+        assert_eq!(proxy_policy.max_age(), 0);
+
+        let ua_cache = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": private_header
+            })
+        ).with_shared(false);
+
+        assert_eq!(ua_cache.is_stale(), false);
+        assert_eq!(ua_cache.max_age(), 1234);
     }
     
     #[test]
     fn test_do_not_share_cookies() {
-        assert!(false);
+        let cookie_header = json!({
+            "set-cookie": "foo=bar",
+            "cache-control": "max-age=99",
+        });
+
+        let proxy_policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": cookie_header
+            })
+        ).with_shared(true);
+
+        assert_eq!(proxy_policy.is_stale(), true);
+        assert_eq!(proxy_policy.max_age(), 0);
+
+        et ua_cache = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": cookie_header
+            })
+        ).with_shared(false);
+
+        assert_eq!(ua_cache.is_stale(), false);
+        assert_eq!(ua_cache.max_age(), 99);
     }
     
     #[test]
     fn test_do_share_cookies_if_immutable() {
-        assert!(false);
+        let cookie_header = json!({
+            "set-cookie": "foo=bar",
+            "cache-control": "immutable, max-age=99",
+        });
+
+        let proxy_policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": cookie_header
+            })
+        ).with_shared(true);
+
+        assert_eq!(proxy_policy.is_stale(), false);
+        assert_eq!(proxy_policy.max_age(), 99);
     }
     
     #[test]
     fn test_cache_explicitly_public_cookie() {
-        assert!(false);
+        let cookie_header = json!({
+            "set-cookie": "foo=bar",
+            "cache-control": "max-age=5, public",
+        });
+
+        let proxy_policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": cookie_header
+            })
+        ).with_shared(true);
+
+        assert_eq!(proxy_policy.is_stale(), false);
+        assert_eq!(proxy_policy.max_age(), 5);
     }
     
     #[test]
     fn test_miss_max_age_equals_zero() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "public, max-age=0",
+                },
+            })
+        );
+
+        assert_eq!(policy.is_stale(), true);
+        assert_eq!(policy.max_age(), 0);
     }
     
     #[test]
     fn test_uncacheable_503() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "status": 503,
+                "headers": {
+                    "cache-control": "public, max-age=0",
+                },
+            })
+        );
+
+        assert_eq!(policy.is_stale(), true);
+        assert_eq!(policy.max_age(), 0);
     }
     
     #[test]
     fn test_cacheable_301() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "status": 301,
+                "headers": {
+                    "last-modified": "Mon, 07 Mar 2016 11:52:56 GMT",
+                },
+            })
+        );
+
+        assert_eq!(policy.is_stale(), false);
     }
     
     #[test]
     fn test_uncacheable_303() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "status": 303,
+                "headers": {
+                    "last-modified": "Mon, 07 Mar 2016 11:52:56 GMT",
+                },
+            })
+        );
+
+        assert_eq!(policy.is_stale(), true);
+        assert_eq!(policy.max_age(), 0);
     }
     
     #[test]
     fn test_cacheable_303() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "status": 303,
+                "headers": {
+                    "cache-control": "max-age=1000",
+                },
+            })
+        );
+
+        assert_eq!(policy.is_stale(), false);
     }
     
     #[test]
     fn test_uncacheable_412() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "status": 412,
+                "headers": {
+                    "cache-control": "public, max-age=1000",
+                },
+            })
+        );
+
+        assert_eq!(policy.is_stale(), true);
+        assert_eq!(policy.max_age(), 0);
     }
     
     #[test]
     fn test_expired_expires_cache_with_max_age() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "public, max-age=9999",
+                    "expires": "Sat, 07 May 2016 15:35:18 GMT",
+                },
+            })
+        );
+
+        assert_eq!(policy.is_stale(), false);
+        assert_eq!(policy.max_age(), 9999);
     }
     
     #[test]
     fn test_expired_expires_cached_with_s_maxage() {
-        assert!(false);
+        let s_max_age_headers = json!({
+            "cache-control": "public, s-maxage=9999",
+            "expires": "Sat, 07 May 2016 15:35:18 GMT",
+        });
+
+        let proxy_policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": s_max_age_headers,
+            })
+        );
+
+        assert_eq!(proxy_policy.is_stale(), false);
+        assert_eq!(proxy_policy.max_age(), 9999);
+
+        let ua_policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": s_max_age_headers,
+            })
+        ).with_shared(false);
+
+        assert_eq!(ua_policy.is_stale(), true);
+        assert_eq!(ua_policy.max_age(), 0);
     }
     
     #[test]
     fn test_max_age_wins_over_future_expires() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "public, max-age=333",
+                    "expires": "How does time work???", // new Date(Date.now() + 3600 * 1000).toGMTString()
+                },
+            })
+        );
+
+        assert_eq!(policy.is_stale(), false);
+        assert_eq!(policy.max_age(), 333);
     }
     
     #[test]
     fn test_remove_hop_headers() {
-        assert!(false);
+        // TODO: Need to figure out how "subclassing" works in Rust
+        // Link to JavaScript function: https://github.com/kornelski/http-cache-semantics/blob/master/test/responsetest.js#L472
     }    
     
     fn assert_headers_passed() {
