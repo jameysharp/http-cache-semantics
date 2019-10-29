@@ -1748,47 +1748,316 @@ mod tests {
     
     #[test]
     fn test_vary_basic() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "headers": {
+                    "weather": "nice",
+                },
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "max-age=5",
+                    "vary": "weather",
+                },
+            })
+        );
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {
+                "weather": "nice",
+            },
+        })), true);
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {
+                "weather": "bad",
+            },
+        })), false);
     }
     
     #[test]
     fn test_asterisks_does_not_match() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "headers": {
+                    "weather": "ok",
+                },
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "max-age=5",
+                    "vary": "*",
+                },
+            })
+        );
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {
+                "weather": "ok",
+            },
+        })), false);
     }
     
     #[test]
     fn test_asterisks_is_stale() {
-        assert!(false);
+        let policy_one = CachePolicy::new(
+            json!({
+                "headers": {
+                    "weather": "ok",
+                },
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "public,max-age=99",
+                    "vary": "*",
+                },
+            })
+        );
+
+        let policy_two = CachePolicy::new(
+            json!({
+                "headers": {
+                    "weather": "ok",
+                },
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "public,max-age=99",
+                    "vary": "weather",
+                },
+            })
+        );
+
+        assert_eq!(policy_one.is_stale(), true);
+        assert_eq!(policy_two.is_stale(), false);
     }
     
     #[test]
     fn test_values_are_case_sensitive() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "headers": {
+                    "weather": "BAD",
+                },
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "public,max-age=5",
+                    "vary": "Weather",
+                },
+            })
+        );
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {
+                "weather": "BAD",
+            },
+        })), true);
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {
+                "weather": "bad",
+            },
+        })), false);
     }
     
     #[test]
     fn test_irrelevant_headers_ignored() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "headers": {
+                    "weather": "nice",
+                },
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "max-age=5",
+                    "vary": "moon-phase",
+                },
+            })
+        );
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {
+                "weather": "bad",
+            },
+        })), true);
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {
+                "weather": "shining",
+            },
+        })), true);
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {
+                "moon-phase": "full",
+            },
+        })), false);
     }
     
     #[test]
     fn test_absence_is_meaningful() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "headers": {
+                    "weather": "nice",
+                },
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "max-age=5",
+                    "vary": "moon-phase, weather",
+                },
+            })
+        );
+        
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {
+                "weather": "nice",
+            },
+        })), true);
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {
+                "weather": "nice",
+                "moon-phase": "",
+            },
+        })), false);
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {},
+        })), false);
     }
     
     #[test]
     fn test_all_values_must_match() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "headers": {
+                    "sun": "shining",
+                    "weather": "nice",
+                },
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "max-age=5",
+                    "vary": "weather, sun",
+                },
+            })
+        );
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {
+                "sun": "shining",
+                "weather": "nice",
+            },
+        })), true);
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {
+                "sun": "shining",
+                "weather": "bad",
+            },
+        })), false);
     }
     
     #[test]
     fn test_whitespace_is_okay() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "headers": {
+                    "sun": "shining",
+                    "weather": "nice",
+                },
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "max-age=5",
+                    "vary": "    weather       ,     sun     ",
+                },
+            })
+        );
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {
+                "sun": "shining",
+                "weather": "nice",
+            },
+        })), true);
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {
+                "weather": "nice",
+            },
+        })), false);
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {
+                "sun": "shining",
+            },
+        })), false);
     }
     
     #[test]
     fn test_order_is_irrelevant() {
-        assert!(false);
+        let policy_one = CachePolicy::new(
+            json!({
+                "headers": {
+                    "sun": "shining",
+                    "weather": "nice",
+                },
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "max-age=5",
+                    "vary": "weather, sun",
+                },
+            })
+        );
+
+        let policy_two = CachePolicy::new(
+            json!({
+                "headers": {
+                    "sun": "shining",
+                    "weather": "nice",
+                },
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "max-age=5",
+                    "vary": "sun, weather",
+                },
+            })
+        );
+
+        assert_eq!(policy_one.satisfies_without_revalidation(json!({
+            "headers": {
+                "weather": "nice",
+                "sun": "shining",
+            },
+        })), true);
+        
+        assert_eq!(policy_one.satisfies_without_revalidation(json!({
+            "headers": {
+                "sun": "shining",
+                "weather": "nice",
+            },
+        })), true);
+
+        assert_eq!(policy_two.satisfies_without_revalidation(json!({
+            "headers": {
+                "weather": "nice",
+                "sun": "shining",
+            },
+        })), true);
+
+        assert_eq!(policy_two.satisfies_without_revalidation(json!({
+            "headers": {
+                "sun": "shining",
+                "weather": "nice",
+            },
+        })), true);
     }
     
     #[test]
