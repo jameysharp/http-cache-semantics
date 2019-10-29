@@ -1295,7 +1295,7 @@ mod tests {
         assert_eq!(proxy_policy.is_stale(), true);
         assert_eq!(proxy_policy.max_age(), 0);
 
-        et ua_cache = CachePolicy::new(
+        let ua_cache = CachePolicy::new(
             json!({
                 "method": "GET",
                 "headers": {},
