@@ -1635,57 +1635,246 @@ mod tests {
     
     #[test]
     fn test_when_urls_match() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "url": "/",
+                "headers": {},
+            }),
+            json!({
+                "status": 200,
+                "headers": {
+                    "cache-control": "max-age=2",
+                },
+            })
+        );
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "url": "/",
+            "headers": {},
+        })), true);
     }
     
     #[test]
     fn test_when_expires_is_present() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "headers": {},
+            }),
+            json!({
+                "status": 302,
+                "headers": {
+                    "expires": "How does time work??", // new Date(Date.now() + 2000).toGMTString()
+                },
+            })
+        );
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {},
+        })), true);
     }
     
     #[test]
     fn test_not_when_urls_mismatch() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "url": "/foo",
+                "headers": {},
+            }),
+            json!({
+                "status": 200,
+                "headers": {
+                    "cache-control": "max-age=2",
+                },
+            })
+        );
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "url": "/foo?bar",
+            "headers": {},
+        })), true);
     }
     
     #[test]
     fn test_when_methods_match() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "GET",
+                "headers": {},
+            }),
+            json!({
+                "status": 200,
+                "headers": {
+                    "cache-control": "'max-age=2",
+                },
+            })
+        );
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "method": "GET",
+            "headers": {},
+        })), true);
     }
     
     #[test]
     fn test_not_when_hosts_mismatch() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "headers": {
+                    "host": "foo",
+                },
+            }),
+            json!({
+                "status": 200,
+                "headers": {
+                    "cache-control": "max-age=2",
+                },
+            })
+        );
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {
+                "host": "foo",
+            },
+        })), true);
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {
+                "host": "foofoo",
+            },
+        })), true);
     }
     
     #[test]
     fn test_when_methods_match_head() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "HEAD",
+                "headers": {},
+            }),
+            json!({
+                "status": 200,
+                "headers": {
+                    "cache-control": "max-age=2",
+                },
+            })
+        );
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "method": "HEAD",
+            "headers": {},
+        })), true);
     }
     
     #[test]
     fn test_not_when_methods_mismatch() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "POST",
+                "headers": {},
+            }),
+            json!({
+                "status": 200,
+                "headers": {
+                    "cache-control": "max-age=2",
+                },
+            })
+        );
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "method": "GET",
+            "headers": {},
+        })), true);
     }
     
     #[test]
     fn test_not_when_methods_mismatch_head() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "method": "HEAD",
+                "headers": {},
+            }),
+            json!({
+                "status": 200,
+                "headers": {
+                    "cache-control": "max-age=2",
+                },
+            })
+        );
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "method": "GET",
+            "headers": {},
+        })), false);
     }
     
     #[test]
     fn test_not_when_proxy_revalidating() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "headers": {},
+            }),
+            json!({
+                "status": 200,
+                "headers": {
+                    "cache-control": "max-age=2, proxy-revalidate ",
+                },
+            })
+        );
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {},
+        })), false);
     }
     
     #[test]
     fn test_when_not_a_proxy_revalidating() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "headers": {},
+            }),
+            json!({
+                "status": 200,
+                "headers": {
+                    "cache-control": "max-age=2, proxy-revalidate ",
+                },
+            })
+        ).with_shared(false);
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {},
+        })), true);
     }
     
     #[test]
     fn test_not_when_no_cache_requesting() {
-        assert!(false);
+        let policy = CachePolicy::new(
+            json!({
+                "headers": {},
+            }),
+            json!({
+                "headers": {
+                    "cache-control": "max-age=2",
+                },
+            })
+        ).with_shared(false);
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {
+                "cache-control": "fine",
+            },
+        })), true);
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {
+                "cache-control": "no-cache",
+            },
+        })), false);
+
+        assert_eq!(policy.satisfies_without_revalidation(json!({
+            "headers": {
+                "cache-control": "no-cache",
+            },
+        })), false);
     }
     
     fn not_modified_response_headers() {
