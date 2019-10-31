@@ -234,7 +234,7 @@ mod http_cache_semantics {
 mod tests {
     extern crate serde_json;
     use crate::http_cache_semantics::CachePolicy;
-    use serde_json::json;
+    use serde_json::{json, Value};
     use chrono::prelude::*;
     use std::string::String;
     use std::collections::HashMap;
@@ -1539,13 +1539,31 @@ mod tests {
         // TODO: Need to figure out how "subclassing" works in Rust
         // Link to JavaScript function: https://github.com/kornelski/http-cache-semantics/blob/master/test/responsetest.js#L472
     }    
-    
-    fn assert_headers_passed() {
-        assert!(false);
+
+    lazy_static! {
+        static ref SIMPLE_REQUEST_REVALIDATE: Value = {
+            let request = json!({
+                "method": "GET",
+                "headers": {
+                    "host": "www.w3c.org",
+                    "connection": "close",
+                    "x-custom": "yes",
+                },
+                "url": "/Protocols/rfc2616/rfc2616-sec14.html",
+            }); 
+
+            return request;
+        };
     }
     
-    fn assert_no_validators() {
-        assert!(false);
+    fn assert_headers_passed(headers: Value) {
+        assert_eq!(headers["connection"], json!(null));
+        assert_eq!(headers["x-custom"], "yes");
+    }
+    
+    fn assert_no_validators(headers: Value) {
+        assert_eq!(headers["if-none-match"], json!(null));
+        assert_eq!(headers["if-modified-since"], json!(null));
     }
     
     #[test]
@@ -1876,7 +1894,34 @@ mod tests {
             },
         })), false);
     }
-    
+
+    lazy_static! {
+        static ref SIMPLE_REQUEST_UPDATE: Value = {
+            let simple_request = json!({
+                "method": "GET",
+                "headers": {
+                    "host": "www.w3c.org",
+                    "connection": "close",
+                },
+                "url": "/Protocols/rfc2616/rfc2616-sec14.html",
+            }); 
+
+            return simple_request;
+        };
+    }
+
+    lazy_static! {
+        static ref CACHEABLE_RESPONSE: Value = {
+            let response = json!({
+                "headers": {
+                    "cache-control": "max-age=111",
+                },
+            });
+
+            return response;
+        };
+    }
+
     fn not_modified_response_headers() {
         assert!(false);
     }
