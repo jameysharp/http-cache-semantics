@@ -42,6 +42,56 @@ fn format_cache_control() -> () {
     unimplemented!();
 }
 
+/// Holds configuration options which control the behavior of the cache and are independent of
+/// any specific request or response.
+#[derive(Debug, Clone)]
+pub struct CacheOptions {
+    /// If `shared` is `true` (default), then the response is evaluated from a perspective of a
+    /// shared cache (i.e. `private` is not cacheable and `s-maxage` is respected). If `shared`
+    /// is `false`, then the response is evaluated from a perspective of a single-user cache
+    /// (i.e. `private` is cacheable and `s-maxage` is ignored). `shared: true` is recommended
+    /// for HTTP clients.
+    pub shared: bool,
+
+    /// If `ignore_cargo_cult` is `true`, common anti-cache directives will be completely
+    /// ignored if the non-standard `pre-check` and `post-check` directives are present. These
+    /// two useless directives are most commonly found in bad StackOverflow answers and PHP's
+    /// "session limiter" defaults.
+    pub ignore_cargo_cult: bool,
+
+    /// If `trust_server_date` is `false`, then server's `Date` header won't be used as the
+    /// base for `max-age`. This is against the RFC, but it's useful if you want to cache
+    /// responses with very short `max-age`, but your local clock is not exactly in sync with
+    /// the server's.
+    pub trust_server_date: bool,
+
+    /// `cache_heuristic` is a fraction of response's age that is used as a fallback
+    /// cache duration. The default is 0.1 (10%), e.g. if a file hasn't been modified for 100
+    /// days, it'll be cached for 100*0.1 = 10 days.
+    pub cache_heuristic: f32,
+
+    /// `immutable_min_time_to_live` is a number of seconds to assume as the default time to
+    /// cache responses with `Cache-Control: immutable`. Note that per RFC these can become
+    /// stale, so `max-age` still overrides the default.
+    pub immutable_min_time_to_live: u32,
+
+    // Allow more fields to be added later without breaking callers.
+    _hidden: (),
+}
+
+impl Default for CacheOptions {
+    fn default() -> Self {
+        CacheOptions {
+            shared: true,
+            ignore_cargo_cult: false,
+            trust_server_date: true,
+            cache_heuristic: 0.1, // 10% matches IE
+            immutable_min_time_to_live: 86400,
+            _hidden: (),
+        }
+    }
+}
+
 struct CachePolicy;
 impl CachePolicy {
     pub fn now() -> String {
