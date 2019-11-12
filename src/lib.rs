@@ -8,8 +8,9 @@
 #[macro_use(lazy_static)]
 extern crate lazy_static;
 
-use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use http::request::Parts as Request;
+use http::response::Parts as Response;
+use std::collections::HashSet;
 
 lazy_static! {
     static ref STATUS_CODE_CACHEABLE_BY_DEFAULT: HashSet<i32> = {
@@ -89,39 +90,6 @@ impl Default for CacheOptions {
     }
 }
 
-/// Lightweight container for the parts of a request which this crate needs access to.
-#[derive(Debug)]
-pub struct Request<'a, H> {
-    /// HTTP method used for this request.
-    pub method: &'a str,
-    /// Request URL, excluding the scheme and host parts. The host should be reflected in the
-    /// `Host` header.
-    pub url: &'a str,
-    /// A collection of HTTP request headers.
-    pub headers: H,
-}
-
-/// Lightweight container for the parts of a response which this crate needs access to.
-#[derive(Debug)]
-pub struct Response<H> {
-    /// Numeric HTTP status code.
-    pub status: u16,
-    /// A collection of HTTP response headers.
-    pub headers: H,
-}
-
-/// Adapter for whatever type you use to represent headers. Implementations must ignore case when
-/// comparing header names.
-pub trait Headers {
-    /// Returns the header with the given name, if present.
-    fn get(&self, name: &str) -> Option<&String>;
-    /// Adds or replaces the header with the given name.
-    fn set(&mut self, name: String, value: String);
-    /// Removes the header with the given name, if present. If there is no header with that name,
-    /// nothing happens.
-    fn remove(&mut self, name: &str);
-}
-
 /// Identifies when responses can be reused from a cache, taking into account HTTP RFC 7234 rules
 /// for user agents and shared caches. It's aware of many tricky details such as the Vary header,
 /// proxy revalidation, and authenticated responses.
@@ -130,11 +98,7 @@ pub struct CachePolicy;
 impl CacheOptions {
     /// Cacheability of an HTTP response depends on how it was requested, so both request and
     /// response are required to create the policy.
-    pub fn policy_for<H: Headers>(
-        &self,
-        request: Request<&H>,
-        response: Response<&H>,
-    ) -> CachePolicy {
+    pub fn policy_for(&self, request: &Request, response: &Response) -> CachePolicy {
         CachePolicy
     }
 }
@@ -164,10 +128,10 @@ impl CachePolicy {
     /// If it returns `false`, then the response may not be matching at all (e.g. it's for a
     /// different URL or method), or may require to be refreshed first. Either way, the new
     /// request's headers will have been updated for sending it to the origin server.
-    pub fn is_cached_response_fresh<H: Headers>(
+    pub fn is_cached_response_fresh(
         &self,
-        new_request: Request<&mut H>,
-        cached_response: Response<&H>,
+        new_request: &mut Request,
+        cached_response: &Response,
     ) -> bool {
         unimplemented!();
     }
@@ -180,11 +144,11 @@ impl CachePolicy {
     /// `false`, you should use new response's body (if present), or make another request to the
     /// origin server without any conditional headers (i.e. don't use `is_cached_response_fresh`
     /// this time) to get the new resource.
-    pub fn is_cached_response_valid<H: Headers>(
+    pub fn is_cached_response_valid(
         &mut self,
-        new_request: Request<&H>,
-        cached_response: Response<&H>,
-        new_response: Response<&H>,
+        new_request: &Request,
+        cached_response: &Response,
+        new_response: &Response,
     ) -> bool {
         unimplemented!();
     }
@@ -192,46 +156,8 @@ impl CachePolicy {
     /// Updates and filters the response headers for a cached response before returning it to a
     /// client. This function is necessary, because proxies MUST always remove hop-by-hop headers
     /// (such as TE and Connection) and update response's Age to avoid doubling cache time.
-    pub fn update_response_headers<H: Headers>(&self, headers: &mut H) {
+    pub fn update_response_headers(&self, headers: &mut Response) {
         unimplemented!();
-    }
-}
-
-/// HashMap-backed implementation of the Headers trait, for callers who don't need a more
-/// specialized representation. This implementation converts all header names to lower-case.
-pub struct SimpleHeaders(pub HashMap<String, String>);
-
-impl SimpleHeaders {
-    /// Returns an empty collection of headers.
-    pub fn new() -> Self {
-        SimpleHeaders(HashMap::new())
-    }
-}
-
-/// Returns a lowercase copy of the given string. If the string is already lowercase, then it is
-/// not copied.
-fn lowercase_copy(name: &str) -> Cow<str> {
-    let mut name = Cow::from(name);
-    if name.bytes().any(|b| b.is_ascii_uppercase()) {
-        name.to_mut().make_ascii_lowercase();
-    }
-    name
-}
-
-impl Headers for SimpleHeaders {
-    fn get(&self, name: &str) -> Option<&String> {
-        let name = lowercase_copy(name);
-        self.0.get(&*name)
-    }
-
-    fn set(&mut self, mut name: String, value: String) {
-        name.make_ascii_lowercase();
-        self.0.insert(name, value);
-    }
-
-    fn remove(&mut self, name: &str) {
-        let name = lowercase_copy(name);
-        self.0.remove(&*name);
     }
 }
 
