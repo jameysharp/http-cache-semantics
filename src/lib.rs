@@ -5,11 +5,9 @@
 // TODO: turn these warnings back on once everything is implemented
 #![allow(unused_mut, unused_variables)]
 
-#[macro_use(lazy_static)]
-extern crate lazy_static;
-
 use http::request::Parts as Request;
 use http::response::Parts as Response;
+use lazy_static::lazy_static;
 use std::collections::HashSet;
 
 lazy_static! {
