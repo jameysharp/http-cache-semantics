@@ -1,10 +1,15 @@
+//! Determines whether a given HTTP response can be cached and whether a cached response can be
+//! reused, following the rules specified in [RFC 7234](https://httpwg.org/specs/rfc7234.html).
+
+#![warn(missing_docs)]
 // TODO: turn these warnings back on once everything is implemented
-#![allow(dead_code, unused_mut)]
+#![allow(unused_mut, unused_variables)]
 
 #[macro_use(lazy_static)]
 extern crate lazy_static;
 
-use std::collections::HashSet;
+use std::borrow::Cow;
+use std::collections::{HashMap, HashSet};
 
 lazy_static! {
     static ref STATUS_CODE_CACHEABLE_BY_DEFAULT: HashSet<i32> = {
@@ -32,14 +37,6 @@ lazy_static! {
         let mut set = HashSet::new();
         return set;
     };
-}
-
-fn parse_cache_control() -> () {
-    unimplemented!();
-}
-
-fn format_cache_control() -> () {
-    unimplemented!();
 }
 
 /// Holds configuration options which control the behavior of the cache and are independent of
@@ -92,90 +89,149 @@ impl Default for CacheOptions {
     }
 }
 
-struct CachePolicy;
+/// Lightweight container for the parts of a request which this crate needs access to.
+#[derive(Debug)]
+pub struct Request<'a, H> {
+    /// HTTP method used for this request.
+    pub method: &'a str,
+    /// Request URL, excluding the scheme and host parts. The host should be reflected in the
+    /// `Host` header.
+    pub url: &'a str,
+    /// A collection of HTTP request headers.
+    pub headers: H,
+}
+
+/// Lightweight container for the parts of a response which this crate needs access to.
+#[derive(Debug)]
+pub struct Response<H> {
+    /// Numeric HTTP status code.
+    pub status: u16,
+    /// A collection of HTTP response headers.
+    pub headers: H,
+}
+
+/// Adapter for whatever type you use to represent headers. Implementations must ignore case when
+/// comparing header names.
+pub trait Headers {
+    /// Returns the header with the given name, if present.
+    fn get(&self, name: &str) -> Option<&String>;
+    /// Adds or replaces the header with the given name.
+    fn set(&mut self, name: String, value: String);
+    /// Removes the header with the given name, if present. If there is no header with that name,
+    /// nothing happens.
+    fn remove(&mut self, name: &str);
+}
+
+/// Identifies when responses can be reused from a cache, taking into account HTTP RFC 7234 rules
+/// for user agents and shared caches. It's aware of many tricky details such as the Vary header,
+/// proxy revalidation, and authenticated responses.
+pub struct CachePolicy;
+
+impl CacheOptions {
+    /// Cacheability of an HTTP response depends on how it was requested, so both request and
+    /// response are required to create the policy.
+    pub fn policy_for<H: Headers>(
+        &self,
+        request: Request<&H>,
+        response: Response<&H>,
+    ) -> CachePolicy {
+        CachePolicy
+    }
+}
+
 impl CachePolicy {
-    pub fn now() -> String {
+    /// Returns `true` if the response can be stored in a cache. If it's `false` then you MUST NOT
+    /// store either the request or the response.
+    pub fn is_storable(&self) -> bool {
         unimplemented!();
     }
 
-    pub fn storable() {
+    /// Returns approximate time in _milliseconds_ until the response becomes stale (i.e. not
+    /// fresh).
+    ///
+    /// After that time (when `time_to_live() <= 0`) the response might not be usable without
+    /// revalidation. However, there are exceptions, e.g. a client can explicitly allow stale
+    /// responses, so always check with `is_cached_response_fresh()`.
+    pub fn time_to_live(&self) -> u32 {
         unimplemented!();
     }
 
-    fn has_explicit_expiration() {
+    /// Returns whether the cached response is still fresh in the context of the new request.
+    ///
+    /// If it returns `true`, then the given request matches the original response this cache
+    /// policy has been created with, and the response can be reused without contacting the server.
+    ///
+    /// If it returns `false`, then the response may not be matching at all (e.g. it's for a
+    /// different URL or method), or may require to be refreshed first. Either way, the new
+    /// request's headers will have been updated for sending it to the origin server.
+    pub fn is_cached_response_fresh<H: Headers>(
+        &self,
+        new_request: Request<&mut H>,
+        cached_response: Response<&H>,
+    ) -> bool {
         unimplemented!();
     }
 
-    fn assert_request_has_headers() {
+    /// Use this method to update the policy state after receiving a new response from the origin
+    /// server. The updated `CachePolicy` should be saved to the cache along with the new response.
+    ///
+    /// Returns whether the cached response body is still valid. If `true`, then a valid 304 Not
+    /// Modified response has been received, and you can reuse the old cached response body. If
+    /// `false`, you should use new response's body (if present), or make another request to the
+    /// origin server without any conditional headers (i.e. don't use `is_cached_response_fresh`
+    /// this time) to get the new resource.
+    pub fn is_cached_response_valid<H: Headers>(
+        &mut self,
+        new_request: Request<&H>,
+        cached_response: Response<&H>,
+        new_response: Response<&H>,
+    ) -> bool {
         unimplemented!();
     }
 
-    pub fn satisfies_without_revalidation() {
+    /// Updates and filters the response headers for a cached response before returning it to a
+    /// client. This function is necessary, because proxies MUST always remove hop-by-hop headers
+    /// (such as TE and Connection) and update response's Age to avoid doubling cache time.
+    pub fn update_response_headers<H: Headers>(&self, headers: &mut H) {
         unimplemented!();
     }
+}
 
-    fn request_matches() {
-        unimplemented!();
+/// HashMap-backed implementation of the Headers trait, for callers who don't need a more
+/// specialized representation. This implementation converts all header names to lower-case.
+pub struct SimpleHeaders(pub HashMap<String, String>);
+
+impl SimpleHeaders {
+    /// Returns an empty collection of headers.
+    pub fn new() -> Self {
+        SimpleHeaders(HashMap::new())
+    }
+}
+
+/// Returns a lowercase copy of the given string. If the string is already lowercase, then it is
+/// not copied.
+fn lowercase_copy(name: &str) -> Cow<str> {
+    let mut name = Cow::from(name);
+    if name.bytes().any(|b| b.is_ascii_uppercase()) {
+        name.to_mut().make_ascii_lowercase();
+    }
+    name
+}
+
+impl Headers for SimpleHeaders {
+    fn get(&self, name: &str) -> Option<&String> {
+        let name = lowercase_copy(name);
+        self.0.get(&*name)
     }
 
-    fn allows_storing_authenticated() {
-        unimplemented!();
+    fn set(&mut self, mut name: String, value: String) {
+        name.make_ascii_lowercase();
+        self.0.insert(name, value);
     }
 
-    fn vary_matches() {
-        unimplemented!();
-    }
-
-    fn copy_without_hop_by_hop_headers() {
-        unimplemented!();
-    }
-
-    pub fn response_headers() {
-        unimplemented!();
-    }
-
-    pub fn date() {
-        unimplemented!();
-    }
-
-    fn server_date() {
-        unimplemented!();
-    }
-
-    pub fn age() {
-        unimplemented!();
-    }
-
-    fn age_value() {
-        unimplemented!();
-    }
-
-    pub fn max_age() {
-        unimplemented!();
-    }
-
-    pub fn time_to_live() {
-        unimplemented!();
-    }
-
-    pub fn stale() {
-        unimplemented!();
-    }
-
-    pub fn from_object() {
-        unimplemented!();
-    }
-
-    pub fn to_object() {
-        unimplemented!();
-    }
-
-    pub fn revalidation_headers() {
-        unimplemented!();
-    }
-
-    pub fn revalidated_policy() {
-        unimplemented!();
+    fn remove(&mut self, name: &str) {
+        let name = lowercase_copy(name);
+        self.0.remove(&*name);
     }
 }
 
